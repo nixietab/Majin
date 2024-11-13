@@ -69,19 +69,21 @@ function getLastModifiedDate($path) {
 
 // Simple dark-themed styling
 echo '<style>
-    body { background-color: #2e2e2e; color: #f5f5f5; font-family: Arial, sans-serif; }
+    body { background-color: #1a1a1a; color: #e0e0e0; font-family: Arial, sans-serif; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #555; }
-    a { color: #00bfff; text-decoration: none; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #444; }
+    a { color: #66c2ff; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .folder { color: #ffcc00; }
-    .file { color: #ffffff; }
+    .folder { color: #66cc99; }
+    .file { color: #b0b0b0; }
     .icon { margin-right: 8px; }
     .footer { margin-top: 20px; text-align: center; }
 </style>';
 
 // Include Font Awesome for icons
 echo '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">';
+
+echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
 
 // Show current directory and navigation back
 echo '<h2>Browsing: ' . htmlspecialchars($directory) . '</h2>';
