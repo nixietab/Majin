@@ -1,7 +1,24 @@
 <?php
-// Configure error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+
+// Function to detect minimal browsers
+function isMinimalBrowser() {
+    $userAgent = isset($_SERVER['HTTP_USER_AGENT']) ? strtolower($_SERVER['HTTP_USER_AGENT']) : '';
+    $minimalBrowsers = ['lynx', 'links', 'elinks', 'w3m', 'browsh'];
+    
+    foreach ($minimalBrowsers as $browser) {
+        if (strpos($userAgent, $browser) !== false) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+function isRootDirectory($current_dir, $base_dir) {
+    return realpath($current_dir) === realpath($base_dir);
+}
 
 // Get and validate the current directory path
 $base_dir = __DIR__;
@@ -34,6 +51,9 @@ $file_list = [];
 
 foreach($files as $file) {
     if ($file === '.' || $file === '..') continue;
+    
+    // Skip index.php in root directory
+    if (isRootDirectory($current_dir, $base_dir) && $file === 'index.php') continue;
     
     $file_path = $current_dir . DIRECTORY_SEPARATOR . $file;
     $is_dir = is_dir($file_path);
@@ -101,6 +121,67 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
     $new_order = ($sort_field === $current_sort && $current_order === 'asc') ? 'desc' : 'asc';
     return '?path=' . urlencode($path) . '&sort=' . $sort_field . '&order=' . $new_order;
 }
+
+// Choose between minimal and full view
+if (isMinimalBrowser()) {
+    // Minimal CLI-friendly view
+    header('Content-Type: text/html; charset=UTF-8');
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>File Explorer</title>
+</head>
+<body>
+    <h1>File Explorer</h1>
+    <p>
+        <a href="?path=">root</a>
+        <?php
+        $current_path = '';
+        foreach ($path_parts as $part) {
+            $current_path .= '/' . $part;
+            echo ' / <a href="?path=' . urlencode(ltrim($current_path, '/')) . '">' . htmlspecialchars($part) . '</a>';
+        }
+        ?>
+    </p>
+    <table>
+        <tr>
+            <th><a href="<?php echo getSortUrl('name', $sort_by, $sort_order, $relative_path); ?>">Name</a></th>
+            <th><a href="<?php echo getSortUrl('type', $sort_by, $sort_order, $relative_path); ?>">Type</a></th>
+            <th><a href="<?php echo getSortUrl('modified', $sort_by, $sort_order, $relative_path); ?>">Modified</a></th>
+            <th><a href="<?php echo getSortUrl('size', $sort_by, $sort_order, $relative_path); ?>">Size</a></th>
+        </tr>
+        <?php if ($relative_path): ?>
+        <tr>
+            <td><a href="?path=<?php echo urlencode(dirname($relative_path)); ?>">..</a></td>
+            <td>Directory</td>
+            <td></td>
+            <td></td>
+        </tr>
+        <?php endif; ?>
+        <?php foreach($file_list as $file): ?>
+        <?php
+            $link_path = $relative_path ? $relative_path . '/' . $file['name'] : $file['name'];
+            $display_name = $file['name'] . ($file['is_dir'] ? '/' : '');
+        ?>
+        <tr>
+            <td><a href="<?php echo $file['is_dir'] ? '?path=' . urlencode($link_path) : '?download=' . urlencode($file['name']) . '&path=' . urlencode($relative_path); ?>"><?php echo htmlspecialchars($display_name); ?></a></td>
+            <td><?php echo $file['is_dir'] ? 'Directory' : strtoupper($file['type'] ?: 'File'); ?></td>
+            <td><?php echo date("Y-m-d H:i:s", $file['modified']); ?></td>
+            <td><?php echo $file['is_dir'] ? '' : formatSize($file['size']); ?></td>
+        </tr>
+        <?php endforeach; ?>
+    </table>
+    <?php if (isRootDirectory($current_dir, $base_dir)): ?>
+        <hr>
+        <p style="margin-top: 1em;">MajinFE v1.0</p>
+    <?php endif; ?>
+</body>
+</html>
+<?php
+} else {
+    // Full featured view
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -218,7 +299,6 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
             white-space: nowrap;
         }
 
-        /* Preview Image Styling */
         .preview-image {
             position: fixed;
             display: none;
@@ -229,6 +309,13 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
             z-index: 9999;
             pointer-events: none;
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .footer {
+            margin-top: 2rem;
+            color: var(--breadcrumb-color);
+            font-size: 0.9rem;
+            padding: 1rem 0;
         }
 
         @media (max-width: 768px) {
@@ -259,7 +346,7 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
     </style>
 </head>
 <body>
-    <h1>File Manager</h1>
+    <h1>File Explorer</h1>
     <div class="breadcrumb">
         <a href="?path=">root</a>
         <?php
@@ -325,6 +412,9 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
         <?php endforeach; ?>
     </div>
     <img id="preview-image" class="preview-image" src="" alt="Preview" />
+    <?php if (isRootDirectory($current_dir, $base_dir)): ?>
+        <div class="footer">MajinFE v1.0</div>
+    <?php endif; ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const preview = document.getElementById('preview-image');
@@ -414,3 +504,6 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 </body>
 </html>
+<?php
+}
+?>
