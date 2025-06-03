@@ -13,7 +13,7 @@ if (isset($_GET['path']) && !empty($_GET['path'])) {
     $requested_path = str_replace('..', '', $requested_path);
     $requested_path = ltrim($requested_path, '/');
     $full_path = realpath($base_dir . DIRECTORY_SEPARATOR . $requested_path);
-    
+
     // Ensure we're still within the base directory
     if ($full_path && strpos($full_path, $base_dir) === 0 && is_dir($full_path)) {
         $current_dir = $full_path;
@@ -128,7 +128,7 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
         body {
             background-color: var(--bg-color);
             color: var(--text-color);
-            font-family: 'Courier New', monospace;
+            font-family: system-ui, Arial, Helvetica, sans-serif !important;
             line-height: 1.6;
             padding: 1rem;
             max-width: 1200px;
@@ -182,13 +182,13 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
         }
 
         .sort-indicator::after {
-            content: '↑';
+            content: '\2191';
             color: var(--sort-indicator-color);
             font-size: 0.8em;
         }
 
         .sort-indicator.desc::after {
-            content: '↓';
+            content: '\2193';
         }
 
         .file-item {
@@ -216,6 +216,19 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        /* Preview Image Styling */
+        .preview-image {
+            position: fixed;
+            display: none;
+            max-width: 300px;
+            max-height: 300px;
+            border: 1px solid #aaa;
+            background: #fff;
+            z-index: 9999;
+            pointer-events: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
 
         @media (max-width: 768px) {
@@ -298,10 +311,12 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
             <?php
                 $link_path = $relative_path ? $relative_path . '/' . $file['name'] : $file['name'];
                 $display_name = $file['name'] . ($file['is_dir'] ? '/' : '');
+                $is_image = !$file['is_dir'] && preg_match('/\\.(jpe?g|png|gif|webp|bmp)$/i', $file['name']);
             ?>
             <a href="<?php echo $file['is_dir'] ? '?path=' . urlencode($link_path) : '?download=' . urlencode($file['name']) . '&path=' . urlencode($relative_path); ?>" 
                class="file-item <?php echo $file['is_dir'] ? 'folder' : ''; ?>"
-               <?php echo !$file['is_dir'] ? 'target="_blank"' : ''; ?>>
+               <?php echo !$file['is_dir'] ? 'target="_blank"' : ''; ?>
+               <?php echo $is_image ? 'data-preview="'.htmlspecialchars($file['name']).'"' : ''; ?>>
                 <span class="file-name"><?php echo htmlspecialchars($display_name); ?></span>
                 <span class="file-type"><?php echo $file['is_dir'] ? 'Directory' : strtoupper($file['type'] ?: 'File'); ?></span>
                 <span class="file-modified"><?php echo date("Y-m-d H:i:s", $file['modified']); ?></span>
@@ -309,5 +324,93 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
             </a>
         <?php endforeach; ?>
     </div>
+    <img id="preview-image" class="preview-image" src="" alt="Preview" />
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const preview = document.getElementById('preview-image');
+    let activeAnchor = null;
+    const margin = 15;
+    const maxWidth = 300;
+    const maxHeight = 300;
+    let lastMouse = {x: 0, y: 0};
+
+    function positionPreview(clientX, clientY) {
+        // Temporarily display the image for size calculation (invisible)
+        preview.style.visibility = 'hidden';
+        preview.style.display = 'block';
+
+        // Get natural size but don't exceed max
+        let width = preview.naturalWidth || maxWidth;
+        let height = preview.naturalHeight || maxHeight;
+        width = Math.min(width, maxWidth);
+        height = Math.min(height, maxHeight);
+
+        // Default position: right and below cursor
+        let left = clientX + margin;
+        let top = clientY + margin;
+
+        // Check right edge
+        if (left + width > window.innerWidth) {
+            left = clientX - width - margin;
+            if (left < margin) left = window.innerWidth - width - margin;
+        }
+        // Check bottom edge
+        if (top + height > window.innerHeight) {
+            top = clientY - height - margin;
+            if (top < margin) top = window.innerHeight - height - margin;
+        }
+        // Final fallback to always stay on screen
+        left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+        top = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
+
+        preview.style.left = left + 'px';
+        preview.style.top = top + 'px';
+        preview.style.visibility = 'visible';
+    }
+
+    document.querySelectorAll('a[data-preview]').forEach(function (a) {
+        a.addEventListener('mouseenter', function (e) {
+            activeAnchor = a;
+            const urlParams = new URLSearchParams(a.search || a.href.split('?')[1] || '');
+            const filename = a.getAttribute('data-preview');
+            let path = urlParams.get('path') || '';
+            let src = '';
+            if (a.href.includes('download=')) {
+                src = '?download=' + encodeURIComponent(filename) + '&path=' + encodeURIComponent(path);
+            } else {
+                src = a.href;
+            }
+            preview.src = src;
+            preview.style.maxWidth = maxWidth + 'px';
+            preview.style.maxHeight = maxHeight + 'px';
+            preview.onload = function() {
+                positionPreview(lastMouse.x, lastMouse.y);
+            }
+            preview.style.display = 'block';
+            // For instant feedback even before image loads
+            positionPreview(e.clientX, e.clientY);
+        });
+        a.addEventListener('mousemove', function (e) {
+            lastMouse.x = e.clientX;
+            lastMouse.y = e.clientY;
+            if (preview.style.display === 'block') {
+                positionPreview(e.clientX, e.clientY);
+            }
+        });
+        a.addEventListener('mouseleave', function () {
+            preview.style.display = 'none';
+            preview.src = '';
+            activeAnchor = null;
+        });
+    });
+
+    // If the window is resized, keep the preview in view
+    window.addEventListener('resize', function () {
+        if (preview.style.display === 'block') {
+            positionPreview(lastMouse.x, lastMouse.y);
+        }
+    });
+});
+</script>
 </body>
 </html>
