@@ -2,17 +2,33 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Function to detect minimal browsers
+// Function to detect minimal or limited browsers
 function isMinimalBrowser() {
     $userAgent = isset($_SERVER['HTTP_USER_AGENT']) ? strtolower($_SERVER['HTTP_USER_AGENT']) : '';
-    $minimalBrowsers = ['lynx', 'links', 'elinks', 'w3m', 'browsh'];
-    
+    // CLI and minimal, plus known limited browsers
+    $minimalBrowsers = [
+        'lynx', 'links', 'elinks', 'w3m', 'browsh',           // CLI browsers
+        'opera mini', 'iemobile', 'ucbrowser', 'puffin',      // Mobile/limited browsers
+        'internet explorer', 'msie', 'trident',               // IE
+        'nintendo 3ds', '3ds',                                // Nintendo 3DS browser
+        'samsungbrowser', 'android 2.', 'android 4.',         // Old mobile browsers
+        'nokia', 'symbian', 'blackberry',                     // Old phones
+        'kindle', 'silk',                                     // Kindle
+        'webtv', 'netfront', 'playstation', 'psp', 'ps vita', // TV/game consoles
+        'minibrowser', 'obigo', 'doris', 'openwave',          // Very old/embedded
+    ];
+
     foreach ($minimalBrowsers as $browser) {
         if (strpos($userAgent, $browser) !== false) {
             return true;
         }
     }
-    
+
+    // Optionally, add further heuristics for very old webkit/gecko versions:
+    if (preg_match('/android 2|android 4|iphone os [1-4]|firefox\/[12]\./', $userAgent)) {
+        return true;
+    }
+
     return false;
 }
 
@@ -122,8 +138,19 @@ function getSortUrl($sort_field, $current_sort, $current_order, $path) {
     return '?path=' . urlencode($path) . '&sort=' . $sort_field . '&order=' . $new_order;
 }
 
+// Override minimal/full with query param
+$force_minimal = isset($_GET['minimal']);
+$force_full = isset($_GET['full']);
+if ($force_minimal) {
+    $minimal = true;
+} elseif ($force_full) {
+    $minimal = false;
+} else {
+    $minimal = isMinimalBrowser();
+}
+
 // Choose between minimal and full view
-if (isMinimalBrowser()) {
+if ($minimal) {
     // Minimal CLI-friendly view
     header('Content-Type: text/html; charset=UTF-8');
 ?>
@@ -175,7 +202,10 @@ if (isMinimalBrowser()) {
     </table>
     <?php if (isRootDirectory($current_dir, $base_dir)): ?>
         <hr>
-        <p style="margin-top: 1em;">MajinFE v1.0</p>
+        <p style="margin-top: 1em;">
+            MajinFE v1.0
+            | <a href="?path=<?php echo urlencode($relative_path); ?>&full=1">Load complete</a>
+        </p>
     <?php endif; ?>
 </body>
 </html>
@@ -413,7 +443,10 @@ if (isMinimalBrowser()) {
     </div>
     <img id="preview-image" class="preview-image" src="" alt="Preview" />
     <?php if (isRootDirectory($current_dir, $base_dir)): ?>
-        <div class="footer">MajinFE v1.0</div>
+        <div class="footer">
+            MajinFE v1.0
+            | <a style="color: var(--link-color);" href="?path=<?php echo urlencode($relative_path); ?>&minimal=1">Load minimal</a>
+        </div>
     <?php endif; ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
