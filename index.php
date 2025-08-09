@@ -113,12 +113,63 @@ $current_url = $protocol . $domain . $_SERVER['REQUEST_URI'];
 if (isset($_GET['download'])) {
     $file = $_GET['download'];
     $file_path = $current_dir . DIRECTORY_SEPARATOR . $file;
-    
+
     if (file_exists($file_path) && !is_dir($file_path)) {
+        $filesize = filesize($file_path);
+        $filename = basename($file_path);
+
+        // Support for Range requests (for chunked/download acceleration)
+        if (isset($_SERVER['HTTP_RANGE'])) {
+            $range = $_SERVER['HTTP_RANGE'];
+            // bytes=START-END
+            if (preg_match('/bytes=(\d*)-(\d*)/', $range, $matches)) {
+                $start = $matches[1] === '' ? 0 : intval($matches[1]);
+                $end = ($matches[2] === '') ? ($filesize - 1) : intval($matches[2]);
+                if ($start > $end || $end >= $filesize) {
+                    // Bad range request
+                    header("HTTP/1.1 416 Requested Range Not Satisfiable");
+                    header("Content-Range: bytes */$filesize");
+                    exit;
+                }
+                $length = $end - $start + 1;
+                header("HTTP/1.1 206 Partial Content");
+                header("Content-Type: application/octet-stream");
+                header("Content-Disposition: attachment; filename=\"$filename\"");
+                header("Content-Length: $length");
+                header("Content-Range: bytes $start-$end/$filesize");
+                header("Accept-Ranges: bytes");
+
+                $chunk_size = 1024 * 1024; // 1 MB chunks
+                $fp = fopen($file_path, "rb");
+                fseek($fp, $start);
+                $sent = 0;
+                while ($sent < $length && !feof($fp)) {
+                    $to_read = min($chunk_size, $length - $sent);
+                    echo fread($fp, $to_read);
+                    $sent += $to_read;
+                    // flush to client
+                    @ob_flush();
+                    flush();
+                }
+                fclose($fp);
+                exit;
+            }
+        }
+
+        // No Range header, send entire file
         header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="'.basename($file).'"');
-        header('Content-Length: ' . filesize($file_path));
-        readfile($file_path);
+        header('Content-Disposition: attachment; filename="'.$filename.'"');
+        header('Content-Length: ' . $filesize);
+        header('Accept-Ranges: bytes');
+        // Send in chunks for compatibility with Cloudflare/chunked transfer
+        $chunk_size = 1024 * 1024; // 1 MB
+        $fp = fopen($file_path, "rb");
+        while (!feof($fp)) {
+            echo fread($fp, $chunk_size);
+            @ob_flush();
+            flush();
+        }
+        fclose($fp);
         exit;
     }
 }
